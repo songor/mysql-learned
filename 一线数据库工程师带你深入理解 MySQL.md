@@ -202,4 +202,58 @@
 
     innodb_flush_log_at_trx_commit 设置为 0，同时 sync_binlog 设置为 0 时，写入数据的速度是最快的。如果对数据库安全性要求不高（测试环境），可以尝试都设置为 0 后再导入数据，能大大提升导入速度。
 
+* order by 原理
+
+  * MySQL 排序方式
+
+    通过有序索引直接返回有序数据（Extra - Using index）
+
+    通过 Filesort 进行排序（Extra - Using filesort）
+
+  * Filesort 内存排序 or 磁盘排序
+
+    内存排序还是磁盘排序取决于排序的数据大小和  sort_buffer_size 配置的大小
+
+    内存排序：“排序的数据大小” < sort_buffer_size
+
+    磁盘排序：“排序的数据大小” > sort_buffer_size
+
+    TRACE（filesort_summary）：number_of_tmp_files - 使用临时文件的个数
+
+  * Filesort 排序模式
+
+    单路排序会把所有需要查询的字段都放到 sort buffer 中，而双路排序只会把主键和需要排序的字段放到 sort buffer 中进行排序，然后再通过主键回到原表查询需要的字段。
+
+    如果 MySQL 排序内存配置的比较小并且没有条件继续增加了，可以适当把 max_length_for_sort_data 配置小点，让优化器选择使用双路排序算法，可以在 sort_buffer 中一次排序更多的行，只是需要再根据主键回到原表取数据。
+
+    如果 MySQL 排序内存有条件可以配置比较大，可以适当增大 max_length_for_sort_data 的值，让优化器优先选择单路排序，把需要的字段放到 sort_buffer 中，这样排序后就会直接从内存里返回查询结果了。
+
+* order by 优化
+
+  * 添加合适索引
+
+    在排序字段上添加索引来优化排序语句。
+
+    对于多个字段排序，可以在多个排序字段上添加联合索引来优化排序语句。
+
+    对于先等值查询再排序的语句，可以通过在条件字段和排序字段添加联合索引来优化此类排序语句。
+
+  * 去掉不必要的返回字段
+
+    扫描整个索引并查找到没索引的行的成本比扫描全表的成本更高，所以优化器放弃使用索引。
+
+  * 修改参数
+
+    max_length_for_sort_data，sort_buffer_size
+
+  * 避免无法利用索引排序的情况
+
+    使用范围查询再排序：a、b 两个字段的联合索引，对于单个 a 的值，b 是有序的。而对于 a 字段的范围查询，也就是 a 字段会有多个值，取到 a，b 的值 b 就不一定有序了，因此要额外进行排序。
+
+    ASC 和 DESC 混合使用将无法使用索引
+
+* group by 优化
+
+  默认情况，会对 group by 字段排序，因此优化方式与 order by 基本一致，如果目的只是分组而不用排序，可以指定 order by null 禁止排序。
+
 * 
