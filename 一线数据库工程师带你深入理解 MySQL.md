@@ -90,15 +90,19 @@
 
   TRACE 字段中整个文本大致分为三个过程，准备阶段（join_preparation），优化阶段（join_optimization），执行阶段（join_execution），使用时，重点关注优化阶段和执行阶段。
 
-  potential_range_indexes - 可能使用的索引
+  table_scan - 全表扫描
 
-  analyzing_range_alternatives - 分析各索引的使用成本
+  potential_range_indexes - 列出表中所有的索引并分析其是否可用
 
-  chosen_range_access_summary - 确认最优方法
+  group_index_range - 评估在使用了 GROUP BY 或者是 DISTINCT 的时候是否有适合的索引
 
-  considered_execution_plans - 考虑的执行计划
+  analyzing_range_alternatives - 分析可选方案的代价
 
-  * MySQL 常见排序模式（filesort_summary.sort_mode）
+  chosen_range_access_summary - 确认最后的方案
+
+  considered_execution_plans - 对比各可行计划的代价，选择相对最优的执行计划
+
+  * MySQL 常见排序模式
 
     <sort_key, rowid> 双路排序：首先根据相应的条件取出相应的排序字段和可以直接定位行数据的行 ID，然后在 sort buffer 中进行排序，排序完后需要再次取回其它需要的字段。
 
