@@ -277,9 +277,41 @@
   让排序时返回的字段尽可能少，所以可以让排序和分页操作先查出主键，然后根据主键查到对应的记录。
 
   ```sql
-  
+  select * from t s0 inner join (select id from t order by a limit 99000, 2) s1 on s0.id = s1.id;
   ```
 
-  
+* 关联查询算法
+
+  * Nested-Loop Join 算法
+
+    一个简单的 Nested-Loop Join(NLJ) 算法一次一行循环地从第一张表（称为驱动表）中读取行，在这行数据中取到关联字段，根据关联字段在另一张表（被驱动表）里取出满足条件的行，然后取出两张表的结果合集。
+
+    MySQL 在关联字段有索引时，才会使用 NLJ，如果没索引，就会使用 Block Nested-Loop Join。
+
+    explain 分析 join 语句时，在第一行的就是驱动表。
+
+    如果没固定连接方式（比如没加 straight_join），优化器会优先选择小表做驱动表，所以使用 inner join 时，前面的表并不一定就是驱动表。
+
+    一般 join 语句中，如果执行计划 Extra 中未出现 Using join buffer (Block Nested Loop)，则表示使用的 join 算法是 NLJ。
+
+  * Block Nested-Loop Join 算法
+
+    把驱动表的数据读入到 join_buffer 中，然后扫描被驱动表，把被驱动表每一行取出来跟 join_buffer 中的数据做对比，如果满足 join 条件，则返回结果给客户端。
+
+  * Batched Key Access 算法
+
+* 优化关联查询
+
+  * 关联字段添加索引
+
+    建议在被驱动表的关联字段上添加索引，让 BNL 变成 NLJ 或者 BKA，可明显优化关联查询。
+
+  * 小表驱动大表
+
+    当使用 Index Nested-Loop Join 算法时，扫描行数跟驱动表的数据量成正比。所以在写 SQL 时，如果确定被关联字段有索引的情况下，建议用小表做驱动表。
+
+  * 临时表
+
+    当遇到 BNL 的 join 语句，如果不方便在关联字段上添加索引，不妨尝试创建临时表，然后在临时表中的关联字段上添加索引，通过临时表来做关联查询。
 
 * 
