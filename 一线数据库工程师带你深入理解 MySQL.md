@@ -122,4 +122,48 @@
 
     index statistics
 
+* 条件字段有索引但是查询不走索引导致查询慢
+
+  * 函数操作
+
+    ```sql
+    where date(current_date) = '2019-05-21';
+    
+    where current_date >= '2019-05-21 00:00:00' and current_date <= '2019-05-21 23:59:59';
+    ```
+
+  * 隐式转换
+
+    ```sql
+    where tele_phone = 13032940358;
+    
+    where cast(tele_phone as signed int) = 13032940358;
+    
+    where tele_phone = '13032940358';
+    ```
+
+  * 模糊查询
+
+    ```sql
+    like '%abc%';
+    
+    like 'abc%'
+    ```
+
+  * 范围查询
+
+    优化器会根据检索比例、表大小、I/O 块大小等进行评估是否使用索引。比如单次查询的数据量过大，优化器将不走索引。
+
+    降低单次查询范围，分多次查询。
+
+  * 计算操作
+
+    ```sql
+    where a - 1 = 1000;
+    
+    where a = 1000 + 1;
+    ```
+
+    一般需要对条件字段做计算时，建议通过程序代码实现，而不是通过 MySQL 实现。如果在 MySQL 中计算的情况避免不了，那必须把计算放在等号后面。
+
 * 
