@@ -14,16 +14,14 @@
 
     ```sql
     mysql> set global slow_query_log = on;
-    Query OK, 0 rows affected
     
     mysql> set global long_query_time = 1;
-    Query OK, 0 rows affected
     
     mysql> show global variables like 'datadir';
     
     mysql> show global variables like 'slow_query_log_file';
     ```
-
+    
   * show processlist 查看正在执行的慢查询
 
 * 使用 explain 分析慢查询
@@ -59,3 +57,65 @@
     | Using join buffer (Block Nested Loop) | 关联查询中，被驱动表的关联字段没索引                         |
     | Using index condition                 | 先条件过滤索引，再查数据                                     |
     | Select tables optimized away          | 使用某些聚合函数（比如 max、min）来访问存在索引的某个字段时  |
+
+* show profile 分析慢查询
+
+  可以通过配置参数 profiling = 1 来启用 SQL 分析。该参数开启后，后续执行的 SQL 语句都将记录其资源开销，如 IO、上下文切换、CPU、Memory 等等。
+
+  ```sql
+  mysql> select @@have_profiling;
+  
+  mysql> select @@profiling;
+  
+  mysql> set profiling = 1;
+  
+  mysql> SQL
+  
+  mysql> show profiles;
+  
+  mysql> show profile for query 1;
+  ```
+
+* trace 分析 SQL 优化器
+
+  ```sql
+  mysql> set session optimizer_trace = "enabled=on", end_markers_in_json = on;
+  
+  mysql> SQL
+  
+  mysql> select * from information_schema.OPTIMIZER_TRACE;
+  
+  mysql> set session optimizer_trace = "enabled=off";
+  ```
+
+  TRACE 字段中整个文本大致分为三个过程，准备阶段（join_preparation），优化阶段（join_optimization），执行阶段（join_execution），使用时，重点关注优化阶段和执行阶段。
+
+  potential_range_indexes - 可能使用的索引
+
+  analyzing_range_alternatives - 分析各索引的使用成本
+
+  chosen_range_access_summary - 确认最优方法
+
+  considered_execution_plans - 考虑的执行计划
+
+  * MySQL 常见排序模式（filesort_summary.sort_mode）
+
+    <sort_key, rowid> 双路排序：首先根据相应的条件取出相应的排序字段和可以直接定位行数据的行 ID，然后在 sort buffer 中进行排序，排序完后需要再次取回其它需要的字段。
+
+    <sort_key, additional_fields> 单路排序：是一次性取出满足条件行的所有字段，然后在 sort buffer 中进行排序。
+
+    <sort_key, packed_additional_fields> 打包数据排序：将 char 和 varchar 字段存到 sort buffer 中时，更加紧缩。
+
+    第二种模式相对第一种模式，避免了二次回表，可以理解为用空间换时间。由于 sort buffer 有限，如果需要查询的数据比较大的话，会增加磁盘排序时间，效率可能比第一种方式更低。
+
+    MySQL 提供了一个参数：max_length_for_sort_data，当“排序的键值对大小” > max_length_for_sort_data 时，MySQL 认为磁盘外部排序的 IO 效率不如回表的效率，会选择第一种模式，否则，会选择第二种模式。
+
+    第三种模式主要解决变长字符数据存储空间浪费的问题。
+
+  * 优化器估计符合条件的行数
+
+    index diver
+
+    index statistics
+
+* 
