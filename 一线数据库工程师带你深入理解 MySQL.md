@@ -631,4 +631,59 @@ MySQL 中，锁就是协调多个用户或者客户端并发访问某一资源�
 
     对于开发来说，在工作中应该尽量避免慢查询，尽量保证事务及时提交，避免大事务等；对于 DBA 来说，也应该尽量避免在业务高峰执行 DDL 操作。
 
+* InnoDB 替换 MyISAM
+
+  InnoDB 支持事务，InnoDB 支持行锁
+
+* 两阶段锁协议
+
+  锁操作分为两个阶段，加锁阶段和解锁阶段，并且保证加锁阶段和解锁阶段不相交。
+
+* InnoDB 行锁模式
+
+  对于普通 select 语句，InnoDB 不会加任何锁，事务可以通过以下语句显式给记录集加共享锁或排他锁：
+
+  共享锁（S）：A shared (S) lock permits the transaction that holds the lock to read a row. 允许一个事务去读一行，阻止其它事务获得相同数据集的排他锁，select * from xxx where ... lock in share mode;
+
+  排他锁（X）：An exclusive (X) lock permits the transaction that holds the lock to update or delete a row. 允许获得排他锁的事务更新数据，阻止其它事务取得相同数据集的共享读锁和排他写锁，select * from xxx where ... for update;
+
+* InnoDB 行锁算法
+
+  Record Lock：单个记录上的索引加锁。
+
+  Gap Lock：间隙锁，对索引项之间的间隙加锁。
+
+  Next-Key Lock：Record Lock + Gap Lock。
+
+  InnoDB 行锁实现特点意味着，如果不通过索引条件检索数据，那么 InnoDB 将对表中所有记录加锁，实际效果跟表锁一样。
+
+* 事务隔离级别
+
+  Read Uncommitted（读未提交），Read Committed（读已提交），Repeatable Read（可重复读），Serializable（串行）
+
+* RC 隔离级别下的行锁
+
+  for update：我们常使用的查询语句，比如 select * from t where a = 1 属于快照读，是不会看到别的事务插入的数据的。而在查询语句后面加了 for update 显式给记录集加了排他锁，也就让查询变成了当前读。插入、更新、删除操作，都属于当前读。其实也就可以理解 select … for update 是为了让普通查询获得插入、更新、删除操作时所获得的锁。
+
+  * 通过非索引字段查询
+
+    ![RC + 条件字段无索引](https://github.com/songor/mysql-learned/blob/master/picture/RC%20%2B%20%E6%9D%A1%E4%BB%B6%E5%AD%97%E6%AE%B5%E6%97%A0%E7%B4%A2%E5%BC%95.jpg)
+
+    由于字段没有索引，因此只能走聚簇索引，进行全表扫描，聚簇索引上的所有记录都被加上了 X 锁。在 MySQL 中，如果一个条件无法通过索引快速过滤，那么存储引擎层面就会将所有记录加锁后返回，因此也就把所有记录都锁上了。
+
+    没有索引的情况下，InnoDB 的当前读会对所有记录都加锁。所以在工作中应该特别注意 InnoDB 这一特性，否则可能会产生大量的锁冲突。
+
+  * 通过唯一索引查询
+
+    ![RC + 条件字段有唯一索引](https://github.com/songor/mysql-learned/blob/master/picture/RC%20%2B%20%E6%9D%A1%E4%BB%B6%E5%AD%97%E6%AE%B5%E6%9C%89%E5%94%AF%E4%B8%80%E7%B4%A2%E5%BC%95.jpg)
+
+    如果查询的条件是唯一索引，那么 SQL 需要在满足条件的唯一索引上加 X 锁，并且会在对应的聚簇索引上加 X 锁。
+
+  * 通过非唯一索引查询
+
+    ![RC + 条件字段有非唯一索引](https://github.com/songor/mysql-learned/blob/master/picture/RC%20%2B%20%E6%9D%A1%E4%BB%B6%E5%AD%97%E6%AE%B5%E6%9C%89%E9%9D%9E%E5%94%AF%E4%B8%80%E7%B4%A2%E5%BC%95.jpg)
+
+    如果查询的条件是非唯一索引，那么 SQL 需要在满足条件的非唯一索引上都加上锁，并且会在它们对应的聚簇索引上加锁。
+
 * 
+
