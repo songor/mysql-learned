@@ -484,4 +484,76 @@
 
   普通索引可以使用 Change Buffer，并且出现死锁的概率比唯一索引低。
 
+* 认识联合索引
+
+  idx_a_b(a, b)：对于 a，b 两个字段都做为条件时，查询是可以走索引的，对于单独 a 字段查询也是可以走索引的，但是对于 b 字段单独查询就走不了索引了。
+
+  建议：where 条件中，经常同时出现的列放在联合索引中；把选择性最大的列放在联合索引的最左边。
+
+* 联合索引使用分析
+
+  * 可以完整用到联合索引的情况
+
+    ```sql
+    idx_a_b_c(a, b, c) > select * from t where a = 1 and b = 1 and c = 1;
+    ```
+
+    联合索引各字段都做为条件时，各字段的位置不会影响联合索引的使用。
+
+    ```sql
+    idx_a_b_c(a, b, c) > select * from t where c = 1 and b = 1 and a = 1;
+    ```
+
+    联合索引前面的字段使用了范围查询，后面的字段做为条件时仍然可以使用完整的联合索引。
+
+    ```sql
+    idx_a_b_c(a, b, c) > select * from t where a = 1 and b in (1, 2) and c = 1;
+    ```
+
+    联合索引前面的字段做为条件时，对后面的字段做排序可以使用完整的联合索引。
+
+    ```sql
+    idx_a_b_c(a, b, c) > select * from t where a = 1 and b = 1 order by c;
+    idx_a_b_c(a, b, c) > select * from t where a = 1 order by b, c;
+    ```
+
+    对联合索引的字段同时做排序时（但是排序的三个字段顺序要跟联合索引中三个字段的顺序一致），可以完整用到联合索引。
+
+    ```sql
+    idx_a_b_c(a, b, c) > select a, b, c from t order by a, b, c;
+    ```
+
+  * 只能使用部分联合索引的情况
+
+    ```sql
+    idx_a_b_c(a, b, c) > select * from t where a = 1 and b = 1;
+    idx_a_b_c(a, b, c) > select * from t where a = 1 and c = 1;
+    ```
+
+    联合索引 idx_a_b_c(a, b, c) 相当于 (a) 、(a, b) 、(a, b, c) 三种索引，称为联合索引的最左原则。
+
+    ```sql
+    idx_a_b_c(a, b, c) > select * from t where a = 1 and b in (1, 2) order by c;
+    ```
+
+    当联合索引前面的字段使用了范围查询，对后面的字段排序使用不了索引排序。
+
+  * 可以用到覆盖索引的情况
+
+    ```sql
+    idx_a_b_c(a, b, c) > select b, c from t where a = 1;
+    idx_a_b_c(a, b, c) > select c from t where a = 1 and b = 1;
+    idx_a_b_c(a, b, c) > select id from t where a = 1 and b = 1 and c = 1;
+    ```
+
+    从辅助索引中就可以查询到结果，不需要回表查询聚集索引中的记录，因此可以减少 SQL 执行过程中的 IO 次数。
+
+  * 不能使用联合索引的情况
+
+    ```sql
+    idx_a_b_c(a, b, c) > select * from t where b = 1;
+    idx_a_b_c(a, b, c) > select * from t order by b;
+    ```
+
 * 
+
