@@ -667,7 +667,7 @@ MySQL 中，锁就是协调多个用户或者客户端并发访问某一资源�
 
   * 通过非索引字段查询
 
-    ![RC + 条件字段无索引](https://github.com/songor/mysql-learned/blob/master/picture/RC %2B 条件字段无索引.jpg)
+    ![RC + 条件字段无索引](https://github.com/songor/mysql-learned/blob/master/picture/RC%20%2B%20%E6%9D%A1%E4%BB%B6%E5%AD%97%E6%AE%B5%E6%97%A0%E7%B4%A2%E5%BC%95.jpg)
 
     由于字段没有索引，因此只能走聚簇索引，进行全表扫描，聚簇索引上的所有记录都被加上了 X 锁。在 MySQL 中，如果一个条件无法通过索引快速过滤，那么存储引擎层面就会将所有记录加锁后返回，因此也就把所有记录都锁上了。
 
@@ -675,13 +675,13 @@ MySQL 中，锁就是协调多个用户或者客户端并发访问某一资源�
 
   * 通过唯一索引查询
 
-    ![RC + 条件字段有唯一索引](https://github.com/songor/mysql-learned/blob/master/picture/RC %2B 条件字段有唯一索引.jpg)
+    ![RC + 条件字段有唯一索引](https://github.com/songor/mysql-learned/blob/master/picture/RC%20%2B%20%E6%9D%A1%E4%BB%B6%E5%AD%97%E6%AE%B5%E6%9C%89%E5%94%AF%E4%B8%80%E7%B4%A2%E5%BC%95.jpg)
 
     如果查询的条件是唯一索引，那么 SQL 需要在满足条件的唯一索引上加 X 锁，并且会在对应的聚簇索引上加 X 锁。
 
   * 通过非唯一索引查询
 
-    ![RC + 条件字段有非唯一索引](https://github.com/songor/mysql-learned/blob/master/picture/RC %2B 条件字段有非唯一索引.jpg)
+    ![RC + 条件字段有非唯一索引](https://github.com/songor/mysql-learned/blob/master/picture/RC%20%2B%20%E6%9D%A1%E4%BB%B6%E5%AD%97%E6%AE%B5%E6%9C%89%E9%9D%9E%E5%94%AF%E4%B8%80%E7%B4%A2%E5%BC%95.jpg)
 
     如果查询的条件是非唯一索引，那么 SQL 需要在满足条件的非唯一索引上都加上锁，并且会在它们对应的聚簇索引上加锁。
 
@@ -693,13 +693,13 @@ MySQL 中，锁就是协调多个用户或者客户端并发访问某一资源�
 
   * 通过非唯一索引查询
 
-    ![RR + 条件字段有非唯一索引](https://github.com/songor/mysql-learned/blob/master/picture/RR %2B 条件字段有非唯一索引.jpg)
+    ![RR + 条件字段有非唯一索引](https://github.com/songor/mysql-learned/blob/master/picture/RR%20%2B%20%E6%9D%A1%E4%BB%B6%E5%AD%97%E6%AE%B5%E6%9C%89%E9%9D%9E%E5%94%AF%E4%B8%80%E7%B4%A2%E5%BC%95.jpg)
 
     RR 隔离级别多了 GAP 锁
 
   * 通过非索引字段查询
 
-    ![RR + 条件字段无索引](https://github.com/songor/mysql-learned/blob/master/picture/RR %2B 条件字段无索引.jpg)
+    ![RR + 条件字段无索引](https://github.com/songor/mysql-learned/blob/master/picture/RR%20%2B%20%E6%9D%A1%E4%BB%B6%E5%AD%97%E6%AE%B5%E6%97%A0%E7%B4%A2%E5%BC%95.jpg)
 
     RR 隔离级别下，非索引字段做条件的当前读不但会把每条记录都加上 X 锁，还会把每个 GAP 加上 GAP 锁。
 
@@ -883,7 +883,7 @@ MySQL 中，锁就是协调多个用户或者客户端并发访问某一资源�
 
 * 结合中间件实现分布式事务
 
-  ![MQ + 分布式事务](https://github.com/songor/mysql-learned/blob/master/picture/MQ %2B 分布式事务.jpg)
+  ![MQ + 分布式事务](https://github.com/songor/mysql-learned/blob/master/picture/MQ%20%2B%20%E5%88%86%E5%B8%83%E5%BC%8F%E4%BA%8B%E5%8A%A1.jpg)
 
   订单业务程序处理完增加订单的操作后，将减库存操作发送到消息队列中间件中（如 RocketMQ），订单业务程序完成提交。然后库存业务程序检查到消息队列有减对应商品库存的信息，就开始执行减库存操作。库存业务执行完减库存操作，再发送一条消息给消息队列中间件，内容为已经减掉库存。
 
@@ -916,6 +916,8 @@ MySQL 中，锁就是协调多个用户或者客户端并发访问某一资源�
   聚集索引是按照每张表的主键构造一颗 B+ 树的，而 B+ 树中，所有记录节点都是按键值的大小顺序存放在同一层叶子节点上。如果每次插入的数据都是在聚集索引树的后面，聚集索引不需要分裂就可以存入数据。但是如果插入的数据值在聚集索引树的中间部分，由于要保证插入后叶子节点中的记录依然有序，就可能需要分裂聚集索引树来保证键值的有序性。
 
   （叶子节点数据页已经满的情况下，如果写入的值是聚集索引树的中间部分，则会进行一次页分裂，以保证叶子节点上的记录有序和 B+ 树的平衡，并且分裂后，有些数据页没被用满，导致页空间浪费）
+
+  ![聚集索引树分裂](https://github.com/songor/mysql-learned/blob/master/picture/%E8%81%9A%E9%9B%86%E7%B4%A2%E5%BC%95%E6%A0%91%E5%88%86%E8%A3%82.jpg)
 
   ![聚集索引树分裂](https://github.com/songor/mysql-learned/blob/master/picture/聚集索引树分裂.jpg)
 
