@@ -555,5 +555,42 @@
     idx_a_b_c(a, b, c) > select * from t order by b;
     ```
 
+* show index 的使用
+
+  ```sql
+  show index from t;
+  ```
+
+  [SHOW INDEX Statement](https://dev.mysql.com/doc/refman/5.7/en/show-index.html)
+
+* Cardinality 取值
+
+  Cardinality 表示该索引不重复记录数量的预估值。如果该值比较小，那就应该考虑是否还有必要创建这个索引。
+
+  Cardinality 统计信息的更新发生在两个操作中，INSERT 和 UPDATE。当然也不是每次 INSERT 或 UPDATE 就更新的，其更新时机为，表中 1/16 的数据已经发生过变化；表中数据发生变化次数超过 2000000000。
+
+  InnoDB 表取出 B+ 树索引中叶子节点的数量，记为 a，随机取出 B+ 树索引中的 8 个（innodb_stats_transient_sample_pages）叶子节点，统计每个页中不同记录的个数（假设为 b1，b2，b3，…，b8），则 Cardinality 的预估值为 (b1 + b2 + b3 + … b8) * a / 8，所以 Cardinality 的值是对 8 个叶子节点进行采样获取的，显然这个值并不准确，只供参考。
+
+  | 参数                                | 解释                                                         |
+  | ----------------------------------- | ------------------------------------------------------------ |
+  | innodb_stats_transient_sample_pages | 设置统计 Cardinality 值时每次采样页的数量，默认值为 8。      |
+  | innodb_stats_method                 | 用来判断如何对待索引中出现的 NULL 值记录，默认为 nulls_equal，表示将 NULL 值记录视为相等的记录。另外还有 nulls_unequal 和 nulls_ignored。nulls_unequal 表示将 NULL 视为不同的记录，nulls_ignored 表示忽略 NULL 值记录。 |
+  | innodb_stats_persistent             | 是否将 Cardinality 持久化到磁盘。                            |
+  | innodb_stats_on_metadata            | 当通过命令 show table status、show index 及访问 information_schema 库下的 tables 表和 statistics 表时，是否需要重新计算索引的 Cardinality。 |
+
+* 统计信息不准确导致选错索引
+
+  在 MySQL 中，优化器控制着索引的选择。一般情况下，优化器会考虑扫描行数、是否使用临时表、是否排序等因素，然后选择一个最优方案去执行 SQL 语句。
+
+  而 MySQL 中扫描行数并不会每次执行语句都去计算一次，因为每次都去计算，数据库压力太大了。实际情况是通过统计信息来预估扫描行数，这个统计信息就可以看成 show index 中的 Cardinality。
+
+  ```sql
+  analyze table t;
+  ```
+
+* 单次选取的数据量过大导致选错索引
+
+  单次选取的数据量过大也有可能导致优化器选错索引，这种时候，可以尝试使用 force index 让 sql 强制走某个索引。
+
 * 
 
