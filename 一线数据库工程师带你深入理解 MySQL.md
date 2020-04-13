@@ -895,7 +895,7 @@ MySQL 中，锁就是协调多个用户或者客户端并发访问某一资源�
 
   使用 prepared statements（预编译）来预防 SQL 注入。
 
-* 主键是否需要设置为自增
+* 主键是否需要设置为自增？
 
   * 关于自增主键
 
@@ -1095,4 +1095,110 @@ MySQL 中，锁就是协调多个用户或者客户端并发访问某一资源�
 
     通过程序，通过数据库中间件（MyCAT）。
 
+* 如何安全高效地删除大量无用数据？
+
+  * 共享表空间和独立表空间
+
+    InnoDB 数据是按照表空间进行存放的，其表空间分为共享表空间和独立表空间。
+
+    共享表空间，文件名为 ibdata1，可以通过参数 `innodb_data_file_path` 进行设置。
+
+    ```my.cnf
+    [mysqld]
+    innodb_data_file_path = ibdata1:1G;ibdata2:1G:autoextend
+    ```
+
+    用两个文件 ibdata1 和 ibdata2 组成表空间，文件 ibdata1 的大小为 1G，文件 ibdata2 的大小为 1G，autoextend 表示用完 1G 可以自动增长。
+
+    独立表空间，每个 InnoDB 表数据存储在一个以 .idb 为后缀的文件中，由参数 `innodb_file_per_table` 控制，设置为 on 表示使用独立表空间，设置为 off 表示使用共享表空间。
+
+    一般情况下建议设置为独立表空间，原因是，如果某张表被 drop 掉，会直接删除该表对应的文件，如果放在共享表空间中，即使执行了 drop table 操作，空间还是不能被回收。
+
+  * 几种数据删除的方式
+
+    * 删除表
+
+      如果是某张表的数据和表结构都不需要使用了，那么可以考虑 drop 掉。
+
+      ```sql
+      alter table t rename t_bak_20200414;
+      -- 等待半个月，观察是否有程序因为找不到表 t 而报错
+      drop table t_bak_20200414;
+      ```
+
+    * 清空表
+
+      如果是某张表的历史数据不需要使用了，要做一次清空，则可以考虑使用 truncate。
+
+      ```sql
+      create table t_bak_20200414 like t;
+      insert into t_bak_20200414 select * from t;
+      truncate table t;
+      -- 观察半个月
+      drop table t_bak_20200414;
+      ```
+
+      需要清空表而使用 delete from xxx，导致主从延迟和磁盘 IO 跑满。原因是 binlog 为 row 模式的情况下，执行全表 delete 会生成每一行对应的删除操作，因此可能导致单个删除事务非常大。而 truncate 可以理解为 drop + create，在 binlog 为 row 模式的情况下，只会产生一行 truncate 操作。所以，建议清空表时使用 truncate 而不使用 delete。
+
+    * 非分区表删除部分记录
+
+      在没有配置分区表的情况下，就只能用 delete 了。
+
+      在 delete 很多数据后，实际表文件大小没变化，原因是，如果通过 delete 删除某条记录，InnoDB 引擎会把这条记录标记为删除，但是磁盘文件的大小并不会缩小。如果之后要在这中间插入一条数据，则可以复用这个位置，如果一直没有数据插入，就会形成一个“空洞”。因此 delete 命令是不能回收空间的，这也是 delete 后表文件大小没变化的原因。
+
+      ```sql
+      create table t_bak_20200414 like t;
+      insert into t_bak_20200414 select * from t;
+      -- 确保 date 字段有索引，如果没有索引，则需要添加索引,目的是避免执行删除命令时全表扫描
+      delete from t where date < '2019-01-01';
+      -- 如果要删除的数据比较多，建议写一个循环，每次删除满足条件记录的 1000 条，目的是避免大事务，删完为止
+      delete from t where date < '2019-01-01' limit 1000;
+      -- 最后重建表，目的是释放表空间，但是会锁表，建议在业务低峰执行
+      alter table t engine=InnoDB;
+      -- 或者
+      optimize table t;
+      ```
+
+    * 分区表删除部分分区
+
+      MySQL 分区是指将一张表按照某种规则（比如时间范围或者哈希等），划分为多个区块，各个区块所属的数据文件是相互独立的。
+
+      ```sql
+      CREATE TABLE t_log (
+      	id INT,
+      	log_info VARCHAR (100),
+      	date datetime
+      ) ENGINE = INNODB PARTITION BY RANGE (YEAR(date))(
+      	PARTITION p2016
+      	VALUES
+      		less THAN (2017),
+      		PARTITION p2017
+      	VALUES
+      		less THAN (2018),
+      		PARTITION p2018
+      	VALUES
+      		less THAN (2019)
+      );
+      ```
+
+      ```sql
+      SELECT
+      	TABLE_SCHEMA,
+      	TABLE_NAME,
+      	PARTITION_NAME,
+      	TABLE_ROWS
+      FROM
+      	information_schema.PARTITIONS
+      WHERE
+      	table_schema = 'muke'
+      AND table_name = 't_log';
+      ```
+
+      ```sql
+      alter table t_log drop partition p2016;
+      ```
+
+      对于要经常删除历史数据的表，建议配置成分区表，以方便后续历史数据删除。
+
 * 
+
