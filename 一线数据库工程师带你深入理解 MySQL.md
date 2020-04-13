@@ -464,7 +464,7 @@
 
   跟 Insert Buffer 一样，Change Buffer 也得满足这两个条件：索引是辅助索引，索引不是唯一。
 
-  * 为什么唯一索引的更新不使用 Change Buffer ?
+  * 为什么唯一索引的更新不使用 Change Buffer？
 
     唯一索引必须要将数据页读入内存才能判断是否违反唯一性约束。如果都已经读入到内存了，那直接更新内存会更快，就没必要使用 Change Buffer 了。
 
@@ -996,5 +996,61 @@ MySQL 中，锁就是协调多个用户或者客户端并发访问某一资源�
     如果没有全部库、表的 select 权限，则也不会使用 QC；
 
     使用了一些函数，如 now()，user()，password() 等。
+
+* 使用读写分离需要注意哪些？
+
+  通常我们说的 MySQL 读写分离是指，对于修改操作在主库上执行，而对于查询操作在从库上执行，主要目的是分担主库的压力。
+
+  * 主从复制的原理
+
+    * MySQL 异步复制
+
+      在主库开启 binlog 的情况下，如果主库有增删改的语句，会记录到 binlog 中，主库通过 IO 线程把 binlog 里面的内容传给从库的中继日志（relay log）中，主库给客户端返回 commit 成功（这里不会管从库是否已经收到了事务的 binlog），从库的 SQL 线程负责读取它的 relay log 里的信息并应用到从库数据库中。
+
+      ![MySQL 异步复制](https://github.com/songor/mysql-learned/blob/master/picture/MySQL%20%E5%BC%82%E6%AD%A5%E5%A4%8D%E5%88%B6.jpg)
+
+      在主库上并行运行的更新 SQL，由于从库只有单个 SQL 线程去消化 relay log，因此更新的 SQL 在从库只能串行执行。这也是很多情况下，会出现主从延迟的原因。
+
+      从 5.6 开始，MySQL 支持了每个库可以配置单独的 SQL 线程来消化 relay log，在 5.7 又增加了基于组提交的并行复制，大大改善了主从延迟的问题。
+
+    * MySQL 半同步复制
+
+      在主库开启 binlog 的情况下，如果主库有增删改的语句，会记录到 binlog 中，主库通过 IO 线程把 binlog 里面的内容传给从库的中继日志（relay log）中，从库收到 binlog 后，发送给主库一个 ACK 表示收到了，主库收到这个 ACK 以后，才能给客户端返回 commit 成功，从库的 SQL 线程负责读取它的 relay log 里的信息并应用到从库数据库中。
+
+      ![MySQL 半同步复制](https://github.com/songor/mysql-learned/blob/master/picture/MySQL%20%E5%8D%8A%E5%90%8C%E6%AD%A5%E5%A4%8D%E5%88%B6.jpg)
+
+  * 常见的读写分离方式
+
+    * 通过程序
+
+      开发通过配置程序来决定修改操作走主库，查询操作走从库。这种方式直连数据库，优点是性能会好点，缺点是配置麻烦。
+
+      但是需要注意的是，从库需要设置为 read_only，防止配置错误在从库写入了数据。
+
+    * 通过中间件
+
+      MyCAT
+
+  * 什么情况下会出现主从延迟
+
+    大表 DDL、大事务、主库 DML 并发大、从库配置差、表上无主键等。
+
+  * 读写分离怎样应对主从延迟
+
+    * 判断主从是否延迟
+
+      判断 Seconds_Behind_Master 是否等于 0：如果 Seconds_Behind_Master = 0，则查询从库，如果大于 0，则查询主库。
+
+      对比位点：如果 Master_Log_File 跟 Relay_Master_Log_File 相等，并且 Read_Master_Log_Pos 跟 Exec_Master_Log_Pos 相等，则可以把读请求放到从库，否则读请求放到主库。
+
+      GTID：对比 Retrieved_Gtid_Set 和 Executed_Gtid_Set 是否相等，相等则把读请求放到从库，有差异则把读请求放到主库。
+
+    * 采用半同步复制
+
+      半同步复制保证了所有给客户端发送过确认提交的事务，从库都已经收到这个日志了，因此出现延迟的概率会小很多。在实际生产应用中，建议结合位点或 GTID 判断。
+
+    * 等待同步完成
+
+      依然采用判断是否有延迟的方法，只是应对方式不一样，如果存在延迟，则将情况反馈给程序，在前端页面提醒用户数据未完全同步，如果没有延迟，则查询从库。
 
 * 
